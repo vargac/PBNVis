@@ -1,17 +1,17 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use std::io::Read;
+use std::{io, env, process, fs};
+use std::io::Write;
 use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use biodivine_lib_bdd::BddValuation;
-use biodivine_lib_bdd::Bdd;
+use biodivine_lib_bdd::{Bdd, BddValuation, BddVariable};
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::symbolic_async_graph::
-    {SymbolicContext, SymbolicAsyncGraph, GraphColoredVertices};
+    {SymbolicContext, SymbolicAsyncGraph, GraphColoredVertices, GraphColors};
 
 use nalgebra as na;
 use na::{Vector3, UnitQuaternion, Translation3, Point3};
@@ -36,19 +36,100 @@ fn val_to_str(val: BddValuation) -> String {
         .join("")
 }
 
-fn vertices_to_str(vertices: &GraphColoredVertices) -> String {
-    vertices.as_bdd().sat_valuations()
+fn bdd_to_str(bdd: &Bdd) -> String {
+    bdd.sat_valuations()
         .map(|val| val_to_str(val))
         .collect::<Vec<String>>()
         .join(", ")
 }
 
+fn vertices_to_str(vertices: &GraphColoredVertices) -> String {
+    bdd_to_str(vertices.as_bdd())
+}
+
+fn get_explicit_bn(
+        symb_graph: &SymbolicAsyncGraph,
+        colors_bdd: &Bdd,
+        unit_colors_bdd: &Bdd,
+        color_i: u32) -> Option<BooleanNetwork> {
+    let symb_context = symb_graph.symbolic_context();
+    let mut i = 0;
+    for color_valuation in colors_bdd.sat_valuations() {
+        i += 1;
+        let partial: Vec<(BddVariable, bool)> = symb_context
+            .parameter_variables()
+            .iter()
+            .map(|v| (*v, color_valuation[*v]))
+            .collect();
+        let color_bdd = unit_colors_bdd.select(&partial);
+        let color = GraphColors::new(color_bdd.clone(), symb_context);
+        assert_eq!(1.0, color.approx_cardinality());
+
+        if i == color_i {
+            //println!("{}", bdd_to_str(&color_bdd));
+            return Some(symb_graph.pick_witness(&color));
+        }
+    }
+    return None;
+}
+
 fn main() {
-    let mut buffer = String::new();
-    std::io::stdin().read_to_string(&mut buffer).unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Use with one parameter -- path to the .aeon model");
+        process::exit(1);
+    }
+    let buffer = fs::read_to_string(&args[1])
+        .expect("Cannot read the file");
 
     let model = BooleanNetwork::try_from(buffer.as_str()).unwrap();
     let symb_graph = SymbolicAsyncGraph::new(model).unwrap();
+
+    let unit_colors = symb_graph.mk_unit_colors();
+    let unit_colors_bdd = unit_colors.as_bdd();
+    let colors_partial_valuation: Vec<(BddVariable, bool)> = symb_graph
+        .symbolic_context()
+        .state_variables()
+        .iter()
+        .map(|v| (*v, true))
+        .collect();
+    let colors_bdd = unit_colors_bdd.select(&colors_partial_valuation);
+
+    println!("Number of colors: {}", colors_bdd.cardinality());
+    let mut color_i: u32 = 0;
+    while color_i == 0 {
+        print!("Choose one: ");
+        io::stdout().flush().unwrap();
+        let mut color_str = String::new();
+        color_i = match io::stdin().read_line(&mut color_str) {
+            Ok(_) => match color_str.trim().parse() {
+                Ok(n) => n,
+                Err(e) => {
+                    eprintln!("Error parsing \"{}\": {}", color_str.trim(), e);
+                    0
+                }
+            }
+            Err(e) => {
+                eprintln!("Error reading line: {}", e);
+                0
+            }
+        };
+        if color_i < 1 || color_i > colors_bdd.cardinality() as u32 {
+            eprintln!("Invalid color");
+            color_i = 0;
+        }
+    }
+    println!("{}", color_i);
+
+    let model =
+        get_explicit_bn(&symb_graph, &colors_bdd, &unit_colors_bdd, color_i);
+    if model.is_none() {
+        eprintln!("Error getting explicit boolean network.");
+        process::exit(1);
+    }
+    let model = model.unwrap();
+    let symb_graph = SymbolicAsyncGraph::new(model).unwrap();
+
     let mut graph = Graph::<String, ()>::new();
     let mut symb_to_idx = HashMap::new();
     let symb_vertices_bdd =
@@ -97,9 +178,9 @@ fn main() {
         }
     }
 
-    println!("{:?}", Dot::with_config(
-        &condensed.map(|u, _| depths[u.index()], |_, _| ()),
-        &[Config::EdgeNoLabel]));
+    //println!("{:?}", Dot::with_config(
+    //    &condensed.map(|u, _| depths[u.index()], |_, _| ()),
+    //    &[Config::EdgeNoLabel]));
 
     let mut cnt_at_depth = vec![0; max_depth + 1];
     for depth in &depths {
