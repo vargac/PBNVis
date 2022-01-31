@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 
 use std::{io, env, process, fs};
+use std::f64::consts::PI;
 use std::io::Write;
 use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
@@ -170,7 +171,7 @@ fn draw_dag(mut dag: Graph<Vec<String>, ()>) {
     let mut dfs = Dfs::new(&dag, aux_root);
     while let Some(node) = dfs.next(&dag) {
         let depth = depths[node.index()];
-        let angle = std::f32::consts::PI / 2.0
+        let angle = PI as f32 / 2.0
             * done_at_depth[depth] as f32
             / cnt_at_depth[depth] as f32;
         let fdepth = depth as f32;
@@ -179,7 +180,8 @@ fn draw_dag(mut dag: Graph<Vec<String>, ()>) {
         let z = angle.sin() * fdepth;
 
         node_pos[node.index()] = Point3::new(x, y, z);
-        let mut sphere = window.add_sphere(0.5);
+        let size = 0.2 + (1.0 + dag[node].len() as f64).ln().atan() / PI;
+        let mut sphere = window.add_sphere(size as f32);
         sphere.set_color(1.0, fdepth / max_depth as f32, 0.0);
         sphere.append_translation(&Translation3::from(node_pos[node.index()]));
 
