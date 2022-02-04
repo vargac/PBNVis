@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use std::{io, env, process, fs};
+use std::{io, env, process, fs, thread, time};
 use std::f64::consts::PI;
 use std::io::Write;
 use std::collections::{HashMap, HashSet};
@@ -15,10 +15,14 @@ use biodivine_lib_param_bn::symbolic_async_graph::
     {SymbolicContext, SymbolicAsyncGraph, GraphColoredVertices, GraphColors};
 
 use nalgebra as na;
-use na::{Vector3, UnitQuaternion, Translation3, Point3};
+use na::{Vector3, UnitQuaternion, Translation3, Point3, Vector2, Point2};
+use na::base::Scalar;
 use kiss3d::window::Window;
+use kiss3d::camera::{ArcBall, Camera};
 use kiss3d::light::Light;
 use kiss3d::resource::Mesh;
+use kiss3d::event::{WindowEvent, MouseButton, Action};
+use kiss3d::scene::SceneNode;
 
 use petgraph::Graph;
 use petgraph::graph::NodeIndex;
@@ -164,10 +168,12 @@ fn draw_dag(mut dag: Graph<Vec<String>, ()>) {
     let (depths, cnt_at_depth, max_depth) = calc_depths(&dag);
 
     let mut window = Window::new_with_size("STG", 500, 500);
+    let mut camera = ArcBall::new(
+        Point3::new(5.0, 5.0, 5.0), Point3::new(0.0, 0.0, 0.0));
     window.set_light(Light::StickToCamera);
 
     let mut done_at_depth = vec![0; max_depth + 1];
-    let mut node_pos = vec![Point3::new(0.0, 0.0, 0.0); dag.node_count()];
+    let mut scene_nodes = vec![SceneNode::new_empty(); dag.node_count()];
     let mut dfs = Dfs::new(&dag, aux_root);
     while let Some(node) = dfs.next(&dag) {
         let depth = depths[node.index()];
@@ -178,23 +184,86 @@ fn draw_dag(mut dag: Graph<Vec<String>, ()>) {
         let x = angle.cos() * fdepth;
         let y = -fdepth;
         let z = angle.sin() * fdepth;
+        let size =
+            (0.2 + (1.0 + dag[node].len() as f64).ln().atan() / PI) as f32;
 
-        node_pos[node.index()] = Point3::new(x, y, z);
-        let size = 0.2 + (1.0 + dag[node].len() as f64).ln().atan() / PI;
-        let mut sphere = window.add_sphere(size as f32);
+        let mut sphere = window.add_sphere(size);
+        sphere.data_mut().object_mut().unwrap().set_user_data(Box::new(size));
         sphere.set_color(1.0, fdepth / max_depth as f32, 0.0);
-        sphere.append_translation(&Translation3::from(node_pos[node.index()]));
+        sphere.append_translation(&Translation3::new(x, y, z));
+        scene_nodes[node.index()] = sphere;
 
         done_at_depth[depth] += 1;
     }
 
-    while window.render() {
+    let mut cx = 0.0;
+    let mut cy = 0.0;
+    let mut chosen: Option<(usize, Point3<f32>)> = None;
+    while window.render_with_camera(&mut camera) {
         for edge_id in dag.edge_indices() {
             let (u, v) = dag.edge_endpoints(edge_id).unwrap();
-            window.draw_line(&node_pos[u.index()], &node_pos[v.index()],
+            window.draw_line(
+                &scene_node_pos(&scene_nodes[u.index()]),
+                &scene_node_pos(&scene_nodes[v.index()]),
                 &Point3::new(1.0, 0.0, 0.0));
         }
+        for event in window.events().iter() {
+            match event.value {
+                WindowEvent::CursorPos(x, y, _) => {
+                    cx = x;
+                    cy = y;
+                }
+                WindowEvent::MouseButton(b, a, _) => {
+                    if b == MouseButton::Button1 && a == Action::Press {
+                        if let Some((i, c)) = chosen {
+                            let n = &mut scene_nodes[i];
+                            n.set_color(c.x, c.y, c.z);
+                            chosen = None;
+                        }
+                        let win_size = window.size();
+                        let (pos, dir) = camera.unproject(
+                            &Point2::new(cx as f32, cy as f32),
+                            &Vector2::new(win_size.x as f32, win_size.y as f32));
+                        if let Some(i) = find_node(&pos, &dir, &scene_nodes) {
+                            let n = &mut scene_nodes[i];
+                            chosen = Some((i, *n.data().get_object().data().color()));
+                            n.set_color(0.0, 0.0, 1.0);
+                        }
+                    }
+                }
+                _ => (),
+            };
+        }
     }
+}
+
+fn scene_node_pos(scene_node: &SceneNode) -> Point3<f32> {
+    scene_node.data().local_translation().transform_point(&Point3::origin())
+}
+
+fn get_node_size(node: &SceneNode) -> f32 {
+    *node.data().object().unwrap().data().user_data()
+        .downcast_ref::<f32>().unwrap()
+}
+
+fn find_node<'a>(pos: &Point3<f32>,
+                 dir: &Vector3<f32>,
+                 nodes: &Vec<SceneNode>) -> Option<usize> {
+    if let Some(nearest) = nodes
+            .iter().enumerate()
+            .filter(|(_, node)| get_node_size(node)
+                           >= line_point_dst(pos, dir, &scene_node_pos(node)))
+            .min_by_key(|(_, node)| (scene_node_pos(node) - pos).dot(&dir) as i32
+                               - get_node_size(node) as i32) {
+        return Some(nearest.0);
+    }
+    None
+}
+
+fn line_point_dst(pos: &Point3<f32>, dir: &Vector3<f32>, point: &Point3<f32>)
+-> f32 {
+    let dst_vec = point - pos - (point - pos).dot(&dir) / dir.dot(&dir) * dir;
+    dst_vec.dot(&dst_vec).sqrt()
 }
 
 fn main() {
@@ -225,9 +294,12 @@ fn main() {
     let model =
         get_explicit_bn(&symb_graph, &colors_bdd, &unit_colors_bdd, color_i)
         .expect("Error getting explicit boolean network.");
+    println!("Computed explicit boolean network");
 
     let graph = symb_to_ord_graph(SymbolicAsyncGraph::new(model).unwrap());
+    println!("Computed STG");
     let condensed = condensation(graph, true);
+    println!("Condensation of STG done");
 
     //println!("{:?}", Dot::with_config(
     //    &condensed.map(|u, _| depths[u.index()], |_, _| ()),
