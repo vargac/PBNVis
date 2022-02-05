@@ -30,8 +30,8 @@ impl Stg {
         }
     }
 
-    pub fn dfs_with_depth_info<F: FnMut(NodeIndex, usize, f32, f32)>
-    (&self, mut fun: F) {
+    pub fn dfs_with_depth_info<F>(&self, mut fun: F)
+    where F: FnMut(NodeIndex, usize, f32, f32) {
         let (depths, cnt_at_depth, max_depth) = self.calc_depths();
         let mut done_at_depth = vec![0; max_depth + 1];
         let mut dfs = Dfs::new(&self.underlying, self.aux_root);
@@ -43,6 +43,10 @@ impl Stg {
             fun(node, d, breadth_percent, depth_percent);
             done_at_depth[d] += 1;
         }
+    }
+
+    pub fn node_label(&self, node_index: usize) -> &Vec<String> {
+        &self.underlying[NodeIndex::new(node_index)]
     }
 
     fn add_aux_root(dag: &mut DagType) -> NodeIndex {

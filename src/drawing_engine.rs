@@ -96,6 +96,9 @@ impl DrawingEngine {
             self.chosen_node =
                 Some((index, *n.data().get_object().data().color()));
             n.set_color(0.0, 0.0, 1.0);
+            let node_label = self.stg.node_label(index);
+            println!("Chosen: [{}] ({})",
+                node_label.join(", "), node_label.len());
         }
     }
 }
