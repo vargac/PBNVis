@@ -27,6 +27,7 @@ pub fn find_node<'a>(pos: &Point3<f32>,
     None
 }
 
+#[allow(dead_code)]
 fn line_point_dst(pos: &Point3<f32>,
                   dir: &Vector3<f32>,
                   point: &Point3<f32>) -> f32 {

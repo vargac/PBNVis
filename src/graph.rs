@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use petgraph::Graph;
 use petgraph::adj::{List, EdgeIndex as AdjEdgeIndex,
                     EdgeIndices as AdjEdgeIndices, NodeIndex as AdjNodeIndex};
-use petgraph::graph::{NodeIndex, EdgeIndex, DefaultIx};
+use petgraph::graph::{NodeIndex, DefaultIx};
 use petgraph::visit::Dfs;
 use petgraph::algo::{condensation, toposort};
 use petgraph::algo::tred::
@@ -69,10 +69,6 @@ impl Stg {
     
     pub fn node_count(&self) -> usize {
         self.underlying.node_count() - 1
-    }
-
-    pub fn is_original_edge(&self, index: EdgeIndex) -> bool {
-        self.underlying.edge_endpoints(index).unwrap().0 != self.aux_root
     }
 
     pub fn red_edge_indices(&self) -> AdjEdgeIndices<(), DefaultIx> {

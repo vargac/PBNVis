@@ -38,16 +38,6 @@ fn val_to_str(val: BddValuation) -> String {
         .join("")
 }
 
-fn bdd_to_str(bdd: &Bdd) -> String {
-    bdd.sat_valuations()
-        .map(|val| val_to_str(val)) .collect::<Vec<String>>()
-        .join(", ")
-}
-
-fn vertices_to_str(vertices: &GraphColoredVertices) -> String {
-    bdd_to_str(vertices.as_bdd())
-}
-
 pub fn get_explicit_bn(
         symb_graph: &SymbolicAsyncGraph,
         colors_bdd: &Bdd,
