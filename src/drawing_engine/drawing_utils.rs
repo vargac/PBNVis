@@ -15,21 +15,37 @@ pub fn find_node<'a>(pos: &Point3<f32>,
                  dir: &Vector3<f32>,
                  nodes: &Vec<SceneNode>) -> Option<usize> {
     if let Some(nearest) = nodes
-            .iter().enumerate()
-            .filter(|(_, node)| get_node_size(node)
-                                >= line_point_dst(pos, dir,
-                                                  &node_pos(node)))
-            .min_by_key(|(_, node)| ((node_pos(node) - pos).dot(&dir)
-                                     - get_node_size(node)) as i32) {
+            .iter()
+            .map(|node| ray_sphere_dist(pos, dir, &node_pos(node),
+                                        get_node_size(node)))
+            .enumerate()
+            .filter(|(_, dist)| dist.is_some())
+            .min_by(|(_, d1), (_, d2)|
+                d1.partial_cmp(d2).expect("Unexpected NaN")) {
         return Some(nearest.0);
     }
     None
 }
 
-pub fn line_point_dst(pos: &Point3<f32>,
-                      dir: &Vector3<f32>,
-                      point: &Point3<f32>) -> f32 {
+fn line_point_dst(pos: &Point3<f32>,
+                  dir: &Vector3<f32>,
+                  point: &Point3<f32>) -> f32 {
     let dst_vec = point - pos
                   - (point - pos).dot(&dir) / dir.dot(&dir) * dir;
     dst_vec.dot(&dst_vec).sqrt()
+}
+
+fn ray_sphere_dist(pos: &Point3<f32>,
+                   dir: &Vector3<f32>,
+                   center: &Point3<f32>,
+                   radius: f32) -> Option<f32> {
+    let vec = center - pos;
+    let a = dir.dot(&dir);
+    let b = -2.0 * dir.dot(&vec);
+    let c = vec.dot(&vec) - radius * radius;
+    let d = b * b - 4.0 * a * c;
+    if d < 0.0 {
+        return None;
+    }
+    Some(f32::min(-b + d.sqrt() / (2.0 * a), -b - d.sqrt() / (2.0 * a)))
 }
