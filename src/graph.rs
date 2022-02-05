@@ -3,7 +3,7 @@ mod symb_graph;
 use std::collections::HashSet;
 
 use petgraph::Graph;
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{NodeIndex, EdgeIndex};
 use petgraph::visit::{Dfs, Topo};
 use petgraph::algo::condensation;
 
@@ -36,6 +36,9 @@ impl Stg {
         let mut done_at_depth = vec![0; max_depth + 1];
         let mut dfs = Dfs::new(&self.underlying, self.aux_root);
         while let Some(node) = dfs.next(&self.underlying) {
+            if node == self.aux_root {
+                continue;
+            }
             let d = depths[node.index()];
             let breadth_percent =
                 done_at_depth[d] as f32 / cnt_at_depth[d] as f32;
@@ -47,6 +50,14 @@ impl Stg {
 
     pub fn node_label(&self, node_index: usize) -> &Vec<String> {
         &self.underlying[NodeIndex::new(node_index)]
+    }
+    
+    pub fn node_count(&self) -> usize {
+        self.underlying.node_count() - 1
+    }
+
+    pub fn is_original_edge(&self, index: EdgeIndex) -> bool {
+        self.underlying.edge_endpoints(index).unwrap().0 != self.aux_root
     }
 
     fn add_aux_root(dag: &mut DagType) -> NodeIndex {
@@ -64,10 +75,13 @@ impl Stg {
     }
 
     fn calc_depths(&self) -> (Vec<usize>, Vec<usize>, usize) {
-        let mut depths = vec![0; self.underlying.node_count()];
+        let mut depths = vec![0; self.underlying.node_count() - 1];
         let mut max_depth = 0;
         let mut topo = Topo::new(&self.underlying);
         while let Some(u) = topo.next(&self.underlying) {
+            if u == self.aux_root {
+                continue;
+            }
             for v in self.underlying.neighbors(u) {
                 if depths[u.index()] + 1 > depths[v.index()] {
                     depths[v.index()] = depths[u.index()] + 1;

@@ -24,7 +24,7 @@ pub struct DrawingEngine {
 
 impl DrawingEngine {
     pub fn new(stg: Stg) -> DrawingEngine {
-        let node_cnt = stg.underlying.node_count();
+        let node_cnt = stg.node_count();
         DrawingEngine {
             stg: stg,
             window: Window::new_with_size("STG", 500, 500),
@@ -73,6 +73,9 @@ impl DrawingEngine {
 
     fn draw_edges(&mut self) {
         for edge_id in self.stg.underlying.edge_indices() {
+            if !self.stg.is_original_edge(edge_id) {
+                continue;
+            }
             let (u, v) = self.stg.underlying.edge_endpoints(edge_id).unwrap();
             self.window.draw_line(
                 &node_pos(&self.scene_nodes[u.index()]),
@@ -89,8 +92,8 @@ impl DrawingEngine {
         }
         let size = Vector2::new(self.window.width() as f32,
                                 self.window.height() as f32);
-        let (pos, dir) = self.camera.unproject(&self.last_cursor_pos,
-                                               &size);
+        let (pos, dir) = self.camera.unproject(&self.last_cursor_pos, &size);
+
         if let Some(index) = find_node(&pos, &dir, &self.scene_nodes) {
             let n = &mut self.scene_nodes[index];
             self.chosen_node =
