@@ -1,12 +1,35 @@
 use std::collections::HashMap;
 
-use biodivine_lib_bdd::{Bdd, BddValuation, BddVariable};
+use biodivine_lib_bdd::{Bdd, BddValuation, BddVariable, BddVariableSet};
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::
     {SymbolicAsyncGraph, GraphColoredVertices, GraphColors};
 
 use petgraph::Graph;
 
+
+pub struct NodePrinter {
+    vars: BddVariableSet,
+}
+
+impl NodePrinter {
+    pub fn new(var_names: Vec<String>) -> NodePrinter {
+        NodePrinter {
+            vars: BddVariableSet::new(var_names.iter()
+                    .map(|s| s.as_str()).collect::<Vec<&str>>().as_slice()),
+        }
+    }
+
+    pub fn node_to_string(&self, node_label: &[String]) -> String {
+        let node_bdd = node_label.iter()
+            .map(|label| Bdd::from(BddValuation::new(label
+                .as_str().chars()
+                .map(|c| c == '1')
+                .collect::<Vec<bool>>())))
+            .reduce(|accum, item| accum.or(&item)).unwrap();
+        node_bdd.to_boolean_expression(&self.vars).to_string()
+    }
+}
 
 fn val_to_str(val: BddValuation) -> String {
     val.vector().iter()
@@ -17,8 +40,7 @@ fn val_to_str(val: BddValuation) -> String {
 
 fn bdd_to_str(bdd: &Bdd) -> String {
     bdd.sat_valuations()
-        .map(|val| val_to_str(val))
-        .collect::<Vec<String>>()
+        .map(|val| val_to_str(val)) .collect::<Vec<String>>()
         .join(", ")
 }
 

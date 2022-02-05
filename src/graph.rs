@@ -35,7 +35,6 @@ impl Stg {
             dag_to_toposorted_adjacency_list::<_, DefaultIx>(&dag, &topo);
         let (trans_red, _) = dag_transitive_reduction_closure(&res);
         let aux_root = Self::add_aux_root(&mut dag);
-        println!("{:?} {:?}", dag, trans_red);
 
         Stg {
             underlying: dag,

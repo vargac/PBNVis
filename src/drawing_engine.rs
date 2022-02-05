@@ -9,7 +9,7 @@ use kiss3d::light::Light;
 use kiss3d::event::{WindowEvent, MouseButton, Action};
 use kiss3d::scene::SceneNode;
 
-use crate::graph::Stg;
+use crate::graph::{Stg, NodePrinter};
 use drawing_utils::*;
 
 
@@ -20,10 +20,11 @@ pub struct DrawingEngine {
     scene_nodes: Vec<SceneNode>,
     last_cursor_pos: Point2<f32>,
     chosen_node: Option<(usize, Point3<f32>)>,
+    node_printer: NodePrinter,
 }
 
 impl DrawingEngine {
-    pub fn new(stg: Stg) -> DrawingEngine {
+    pub fn new(stg: Stg, node_printer: NodePrinter) -> DrawingEngine {
         let node_cnt = stg.node_count();
         DrawingEngine {
             stg: stg,
@@ -32,6 +33,7 @@ impl DrawingEngine {
             scene_nodes: vec![SceneNode::new_empty(); node_cnt],
             last_cursor_pos: Point2::origin(),
             chosen_node: None,
+            node_printer: node_printer,
         }
     }
 
@@ -77,7 +79,8 @@ impl DrawingEngine {
             self.window.draw_line(
                 &node_pos(&self.scene_nodes[u as usize]),
                 &node_pos(&self.scene_nodes[v as usize]),
-                &Point3::new(1.0, 0.0, 0.0));
+                &self.scene_nodes[u as usize]
+                    .data().get_object().data().color());
         }
     }
 
@@ -97,8 +100,9 @@ impl DrawingEngine {
                 Some((index, *n.data().get_object().data().color()));
             n.set_color(0.0, 0.0, 1.0);
             let node_label = self.stg.node_label(index);
-            println!("Chosen: [{}] ({})",
-                node_label.join(", "), node_label.len());
+            println!("Chosen (size {}): {}",
+                node_label.len(),
+                self.node_printer.node_to_string(node_label));
         }
     }
 }

@@ -17,6 +17,9 @@ use crate::graph::Stg;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let model = BooleanNetwork::try_from(cli::load_bn(&args).as_str()).unwrap();
+    let variable_names = model.variables()
+        .map(|id| String::from(model.get_variable_name(id)))
+        .collect::<Vec<String>>();
     let symb_graph = SymbolicAsyncGraph::new(model).unwrap();
 
     let colors_bdd = graph::get_symb_colors(&symb_graph);
@@ -32,12 +35,9 @@ fn main() {
     println!("Computed STG");
     let stg = Stg::new(graph);
     println!("Computed condensed STG");
-
-    //println!("{:?}", Dot::with_config(
-    //    &condensed.map(|u, _| depths[u.index()], |_, _| ()),
-    //    &[Config::EdgeNoLabel]));
     
-    let mut engine = DrawingEngine::new(stg);
+    let printer = graph::NodePrinter::new(variable_names);
+    let mut engine = DrawingEngine::new(stg, printer);
     engine.init();
     while engine.update() {
     }
