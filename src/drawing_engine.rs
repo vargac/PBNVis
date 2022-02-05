@@ -41,7 +41,7 @@ impl DrawingEngine {
         self.window.set_light(Light::StickToCamera);
         self.stg.dfs_with_depth_info(|node, depth, b_percent, d_percent| {
             let angle = PI / 2.0 * b_percent;
-            let fdepth = depth as f32;
+            let fdepth = (depth + 1) as f32;
             let flen = self.stg.underlying[node].len() as f32;
             let size = 0.2 + (1.0 + flen).ln().atan() / PI;
 
