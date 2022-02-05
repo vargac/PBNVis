@@ -72,14 +72,11 @@ impl DrawingEngine {
     }
 
     fn draw_edges(&mut self) {
-        for edge_id in self.stg.underlying.edge_indices() {
-            if !self.stg.is_original_edge(edge_id) {
-                continue;
-            }
-            let (u, v) = self.stg.underlying.edge_endpoints(edge_id).unwrap();
+        for edge_id in self.stg.red_edge_indices() {
+            let (u, v) = self.stg.red_edge_endpoints(edge_id).unwrap();
             self.window.draw_line(
-                &node_pos(&self.scene_nodes[u.index()]),
-                &node_pos(&self.scene_nodes[v.index()]),
+                &node_pos(&self.scene_nodes[u as usize]),
+                &node_pos(&self.scene_nodes[v as usize]),
                 &Point3::new(1.0, 0.0, 0.0));
         }
     }

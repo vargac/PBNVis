@@ -3,9 +3,13 @@ mod symb_graph;
 use std::collections::HashSet;
 
 use petgraph::Graph;
-use petgraph::graph::{NodeIndex, EdgeIndex};
-use petgraph::visit::{Dfs, Topo};
-use petgraph::algo::condensation;
+use petgraph::adj::{List, EdgeIndex as AdjEdgeIndex,
+                    EdgeIndices as AdjEdgeIndices, NodeIndex as AdjNodeIndex};
+use petgraph::graph::{NodeIndex, EdgeIndex, DefaultIx};
+use petgraph::visit::Dfs;
+use petgraph::algo::{condensation, toposort};
+use petgraph::algo::tred::
+    {dag_to_toposorted_adjacency_list, dag_transitive_reduction_closure};
 
 pub use symb_graph::*;
 
@@ -14,6 +18,9 @@ type DagType = Graph<Vec<String>, ()>;
 
 pub struct Stg {
     pub underlying: DagType,
+    trans_red: List<()>, // indexing using 'revmap'
+    revmap: Vec<DefaultIx>,
+    topo: Vec<NodeIndex>, // same indexing as underlying
     aux_root: NodeIndex,
 }
 
@@ -23,9 +30,18 @@ impl Stg {
     }
 
     pub fn from_condensed(mut dag: DagType) -> Self {
+        let topo = toposort(&dag, None).unwrap();
+        let (res, revmap) =
+            dag_to_toposorted_adjacency_list::<_, DefaultIx>(&dag, &topo);
+        let (trans_red, _) = dag_transitive_reduction_closure(&res);
         let aux_root = Self::add_aux_root(&mut dag);
+        println!("{:?} {:?}", dag, trans_red);
+
         Stg {
             underlying: dag,
+            trans_red: trans_red,
+            revmap: revmap,
+            topo: topo,
             aux_root: aux_root,
         }
     }
@@ -60,6 +76,16 @@ impl Stg {
         self.underlying.edge_endpoints(index).unwrap().0 != self.aux_root
     }
 
+    pub fn red_edge_indices(&self) -> AdjEdgeIndices<(), DefaultIx> {
+        self.trans_red.edge_indices()
+    }
+
+    pub fn red_edge_endpoints(&self, e: AdjEdgeIndex)
+    -> Option<(AdjNodeIndex, AdjNodeIndex)> {
+        self.trans_red.edge_endpoints(e).map(
+            |(u, v)| (self.revmap[u as usize], self.revmap[v as usize]))
+    }
+
     fn add_aux_root(dag: &mut DagType) -> NodeIndex {
         let mut roots = dag.node_indices().collect::<HashSet<NodeIndex>>();
         for node in dag.node_indices() {
@@ -77,12 +103,11 @@ impl Stg {
     fn calc_depths(&self) -> (Vec<usize>, Vec<usize>, usize) {
         let mut depths = vec![0; self.underlying.node_count() - 1];
         let mut max_depth = 0;
-        let mut topo = Topo::new(&self.underlying);
-        while let Some(u) = topo.next(&self.underlying) {
-            if u == self.aux_root {
+        for u in &self.topo {
+            if *u == self.aux_root {
                 continue;
             }
-            for v in self.underlying.neighbors(u) {
+            for v in self.underlying.neighbors(*u) {
                 if depths[u.index()] + 1 > depths[v.index()] {
                     depths[v.index()] = depths[u.index()] + 1;
                 }
